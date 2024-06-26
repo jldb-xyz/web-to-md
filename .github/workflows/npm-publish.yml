@@ -12,11 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
         with:
-          node-version: 16
-      - run: npm ci
-      - run: npm test
+          version: 9
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+          registry-url: https://registry.npmjs.org/
+      - name: Install dependencies
+        run: pnpm install
+      - run: pnpm test
 
   publish-npm:
     needs: build
@@ -35,6 +43,6 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - name: Install dependencies
         run: pnpm install
-      - run: npm publish
+      - run: pnpm publish
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
