@@ -1,6 +1,6 @@
 {
-  "name": "web-to-md",
-  "version": "1.0.0",
+  "name": "@jldb/web-to-md",
+  "version": "0.1.0",
   "description": "A CLI tool to crawl (for example) documentation websites and convert them to Markdown.",
   "main": "dist/index.js",
   "bin": {
