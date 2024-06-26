@@ -38,6 +38,7 @@ importers:
       turndown:
         specifier: ^7.2.0
         version: 7.2.0
+    devDependencies:
       typescript:
         specifier: ^5.5.2
         version: 5.5.2
