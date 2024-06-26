@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "pnpm run build",
+    "test": "echo \"Test not implemented\" && exit 0"
   },
   "keywords": ["documentation", "crawler", "markdown", "cli"],
   "author": "Your Name",
