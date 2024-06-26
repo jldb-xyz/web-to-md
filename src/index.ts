@@ -93,7 +93,7 @@ async function saveToFile(content: string, filePath: string): Promise<void> {
   await fs.promises.writeFile(filePath, content);
 }
 
-async function combineFiles(jobDir: string, outputDir: string, maxFileSizeMB: number, name: string | undefined): Promise<void> {
+async function combineFiles(jobDir: string, outputDir: string, maxFileSizeMB: number, name: string | undefined, url: string): Promise<void> {
   const files = await fs.promises.readdir(jobDir);
   const mdFiles = files.filter(file => file.endsWith('.md'));
 
@@ -101,7 +101,8 @@ async function combineFiles(jobDir: string, outputDir: string, maxFileSizeMB: nu
   let currentFileSize = 0;
   let fileCounter = 1;
 
-  const baseFileName = name || 'combined';
+  // Use the provided name, or fallback to the URL's hostname
+  const baseFileName = name || new URL(url).hostname;
 
   for (const file of mdFiles) {
     const content = await fs.promises.readFile(path.join(jobDir, file), 'utf-8');
@@ -536,7 +537,7 @@ async function crawlWebsite(url: string, outputDir: string, excludePaths: string
     if (multibar) multibar.stop();
 
     if (combine) {
-      await combineFiles(getJobDirectory(outputDir, url), outputDir, maxFileSizeMB, name);
+      await combineFiles(getJobDirectory(outputDir, url), outputDir, maxFileSizeMB, name, url);
     } else {
       await moveFiles(getJobDirectory(outputDir, url), outputDir, preserveStructure);
     }
@@ -614,7 +615,10 @@ async function main() {
       await new Promise(resolve => crawlerEvents.once('workerFinished', resolve));
     }
     
-    logger.log("All workers have finished. Exiting...");
+    logger.log("All workers have finished. Cleaning up job directory...");
+    // Add this line to clean up the job directory
+    await fs.promises.rm(getJobDirectory(options.output, options.url), { recursive: true, force: true });
+    logger.log("Job directory cleaned up. Exiting...");
   } catch (error) {
     logger.error("Fatal error during crawling:", error);
   } finally {
