@@ -1,14 +1,19 @@
 {
-  "name": "ts-doc-crawler",
+  "name": "web-to-md",
   "version": "1.0.0",
-  "description": "A CLI tool to crawl documentation websites and convert them to Markdown",
-  "main": "src/index.ts",
-  "scripts": {
-    "start": "ts-node src/index.ts"
+  "description": "A CLI tool to crawl (for example) documentation websites and convert them to Markdown.",
+  "main": "dist/index.js",
+  "bin": {
+    "docucrawler": "./dist/index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["documentation", "crawler", "markdown", "cli"],
+  "author": "Your Name",
+  "license": "MIT",
   "dependencies": {
     "@types/cli-progress": "^3.11.5",
     "@types/node": "^20.14.9",
@@ -19,7 +24,9 @@
     "commander": "^12.1.0",
     "puppeteer": "^22.12.0",
     "ts-node": "^10.9.2",
-    "turndown": "^7.2.0",
+    "turndown": "^7.2.0"
+  },
+  "devDependencies": {
     "typescript": "^5.5.2"
   }
 }
