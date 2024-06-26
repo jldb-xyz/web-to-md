@@ -4,7 +4,7 @@
   "description": "A CLI tool to crawl (for example) documentation websites and convert them to Markdown.",
   "main": "dist/index.js",
   "bin": {
-    "docucrawler": "./dist/index.js"
+    "docucrawler": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -12,8 +12,13 @@
     "prepublishOnly": "pnpm run build",
     "test": "echo \"Test not implemented\" && exit 0"
   },
-  "keywords": ["documentation", "crawler", "markdown", "cli"],
-  "author": "Your Name",
+  "keywords": [
+    "documentation",
+    "crawler",
+    "markdown",
+    "cli"
+  ],
+  "author": "Jonathan Bennett",
   "license": "MIT",
   "dependencies": {
     "@types/cli-progress": "^3.11.5",
