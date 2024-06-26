@@ -1,0 +1,25 @@
+{
+  "name": "ts-doc-crawler",
+  "version": "1.0.0",
+  "description": "A CLI tool to crawl documentation websites and convert them to Markdown",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "ts-node src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/cli-progress": "^3.11.5",
+    "@types/node": "^20.14.9",
+    "@types/puppeteer": "^7.0.4",
+    "@types/turndown": "^5.0.4",
+    "ansi-colors": "^4.1.3",
+    "cli-progress": "^3.12.0",
+    "commander": "^12.1.0",
+    "puppeteer": "^22.12.0",
+    "ts-node": "^10.9.2",
+    "turndown": "^7.2.0",
+    "typescript": "^5.5.2"
+  }
+}
