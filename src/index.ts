@@ -42,6 +42,7 @@ interface CrawlState {
   visited: string[];
   queue: [string, number, string][]; // Add title to the queue
   jobId: string;
+  contentHashes?: { [url: string]: string };
   settings: {
     url: string;
     outputDir: string;
@@ -69,6 +70,7 @@ const stateEmitter = new EventEmitter();
 
 // Modify the saveState function to emit an event
 function saveState(jobDir: string, state: CrawlState): void {
+  fs.mkdirSync(jobDir, { recursive: true });
   fs.writeFileSync(path.join(jobDir, 'state.json'), JSON.stringify(state));
   stateEmitter.emit('stateUpdated', state);
 }
@@ -140,15 +142,16 @@ async function moveFiles(jobDir: string, outputDir: string, preserveStructure: b
   );
 }
 
-async function savePageContent(page: puppeteer.Page, url: string, jobDir: string, turndownService: TurndownService): Promise<string> {
+async function savePageContent(page: puppeteer.Page, url: string, jobDir: string, turndownService: TurndownService): Promise<{ title: string, contentHash: string }> {
   const content = await page.content();
   const markdown = turndownService.turndown(content);
   const title = await page.title();
   const sanitizedTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const contentHash = crypto.createHash('md5').update(markdown).digest('hex');
   const fileName = `${sanitizedTitle}_${crypto.createHash('md5').update(url).digest('hex')}.md`;
   const filePath = path.join(jobDir, fileName);
   await saveToFile(markdown, filePath);
-  return sanitizedTitle;
+  return { title: sanitizedTitle, contentHash };
 }
 
 // Add these variables before the crawlWebsite function
@@ -190,40 +193,59 @@ if (DEBUG) {
   } as Console;
 }
 
-async function crawlWebsite(url: string, outputDir: string, excludePaths: string[], maxPagesPerSecond: number, maxDepth: number, maxFileSizeMB: number, combine: boolean, name: string | undefined, preserveStructure: boolean, timeout: number, initialTimeout: number, retries: number, numWorkers: number): Promise<void> {
-  logger.log('Starting crawl process with options:', { url, outputDir, excludePaths, maxPagesPerSecond, maxDepth, maxFileSizeMB, combine, name, preserveStructure, timeout, initialTimeout, retries, numWorkers });
+function readConfigFile(outputDir: string): CrawlState | null {
+  const configPath = path.join(outputDir, 'config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const configData = fs.readFileSync(configPath, 'utf-8');
+      return JSON.parse(configData) as CrawlState;
+    } catch (error) {
+      console.error('Error reading config file:', error);
+    }
+  }
+  return null;
+}
 
-  const jobDir = getJobDirectory(outputDir, url);
-  fs.mkdirSync(jobDir, { recursive: true });
+async function crawlWebsite(url: string, outputDir: string, excludePaths: string[], maxPagesPerSecond: number, maxDepth: number, maxFileSizeMB: number, combine: boolean, name: string | undefined, preserveStructure: boolean, timeout: number, initialTimeout: number, retries: number, numWorkers: number): Promise<void> {
+  logger.log('Starting crawl process');
 
   const turndownService = new TurndownService();
+  const jobDir = getJobDirectory(outputDir, url);
 
-  state = loadState(jobDir) || {
-    visited: [],
-    queue: [[url, 0, '']],
-    jobId: crypto.randomUUID(),
-    settings: {
-      url,
-      outputDir,
-      excludePaths,
-      maxPagesPerSecond,
-      maxDepth,
-      maxFileSizeMB,
-      combine,
-      name,
-      preserveStructure,
-      timeout,
-      initialTimeout,
-      retries,
-      numWorkers
-    }
-  };
-
-  // Use saved settings if resuming
-  ({ url, outputDir, excludePaths, maxPagesPerSecond, maxDepth, maxFileSizeMB, combine, name, preserveStructure, timeout, initialTimeout, retries, numWorkers } = state.settings);
-
-  visited = new Set<string>(state.visited);
-  queue = state.queue;
+  const config = readConfigFile(outputDir);
+  if (config) {
+    logger.log('Using config file');
+    ({ url, outputDir, excludePaths, maxPagesPerSecond, maxDepth, maxFileSizeMB, combine, name, preserveStructure, timeout, initialTimeout, retries, numWorkers } = config.settings);
+    state = config;
+    visited = new Set<string>(state.visited);
+    queue = state.queue;
+  } else {
+    logger.log('No config file found, using provided parameters');
+    state = loadState(getJobDirectory(outputDir, url)) || {
+      visited: [],
+      queue: [[url, 0, '']],
+      jobId: crypto.randomUUID(),
+      settings: {
+        url,
+        outputDir,
+        excludePaths,
+        maxPagesPerSecond,
+        maxDepth,
+        maxFileSizeMB,
+        combine,
+        name,
+        preserveStructure,
+        timeout,
+        initialTimeout,
+        retries,
+        numWorkers
+      }
+    };
+    // Use saved settings if resuming
+    ({ url, outputDir, excludePaths, maxPagesPerSecond, maxDepth, maxFileSizeMB, combine, name, preserveStructure, timeout, initialTimeout, retries, numWorkers } = state.settings);
+    visited = new Set<string>(state.visited);
+    queue = state.queue;
+  }
 
   browser = await puppeteer.launch({});
 
@@ -345,8 +367,15 @@ async function crawlWebsite(url: string, outputDir: string, excludePaths: string
             }
           }
     
-          const pageTitle = await savePageContent(worker, currentUrl, jobDir, turndownService);
-          if (workerBar) workerBar.update(0, { status: `Worker ${workerId}: 💾 Saved ${colors.green(pageTitle)}` });
+          const { title: pageTitle, contentHash } = await savePageContent(worker, currentUrl, jobDir, turndownService);
+          const existingHash = state.contentHashes ? state.contentHashes[currentUrl] : null;
+          if (existingHash && existingHash === contentHash) {
+            if (workerBar) workerBar.update(0, { status: `Worker ${workerId}: 🔄 No changes for ${colors.green(pageTitle)}` });
+          } else {
+            if (workerBar) workerBar.update(0, { status: `Worker ${workerId}: 💾 Saved ${colors.green(pageTitle)}` });
+            if (!state.contentHashes) state.contentHashes = {};
+            state.contentHashes[currentUrl] = contentHash;
+          }
     
           if (depth < maxDepth) {
             const newUrls = await worker.evaluate((baseUrl) => {
@@ -368,7 +397,7 @@ async function crawlWebsite(url: string, outputDir: string, excludePaths: string
             if (workerBar) workerBar.update(0, { status: `Worker ${workerId}: ➕ Added ${colors.yellow(addedUrls.toString())} new URLs` });
           }
     
-          if (overallProgress) overallProgress.update(visited.size, { status: `Crawled: ${visited.size}, Queued: ${queue.length}, Estimated: ${totalEstimatedPages}` });
+          if (overallProgress) overallProgress.update(visited.size, { status: `🕷️ Crawling: (Crawled: ${visited.size}, Queued: ${queue.length})` });
           if (workerBar) workerBar.update(0, { status: `Worker ${workerId}: ✅ Completed ${colors.green(currentUrl)}` });
         } catch (error) {
           if (error instanceof puppeteer.TimeoutError) {
@@ -462,7 +491,7 @@ async function crawlWebsite(url: string, outputDir: string, excludePaths: string
       jobId: state.jobId,
       settings: state.settings
     };
-    saveState(jobDir, state);
+    saveState(getJobDirectory(outputDir, url), state);
 
     // Update total estimated pages to exact count
     totalEstimatedPages = visited.size + queue.length;
@@ -507,9 +536,9 @@ async function crawlWebsite(url: string, outputDir: string, excludePaths: string
     if (multibar) multibar.stop();
 
     if (combine) {
-      await combineFiles(jobDir, outputDir, maxFileSizeMB, name);
+      await combineFiles(getJobDirectory(outputDir, url), outputDir, maxFileSizeMB, name);
     } else {
-      await moveFiles(jobDir, outputDir, preserveStructure);
+      await moveFiles(getJobDirectory(outputDir, url), outputDir, preserveStructure);
     }
 
     console.log('Crawling completed successfully.');
@@ -520,7 +549,10 @@ async function crawlWebsite(url: string, outputDir: string, excludePaths: string
     // Cleanup
     await cleanup();
     if (isWorkComplete()) {
-      fs.rmSync(jobDir, { recursive: true, force: true });
+      // Save the final state as the config file
+      const configPath = path.join(outputDir, 'config.json');
+      fs.writeFileSync(configPath, JSON.stringify(state, null, 2));
+      console.log('Crawl completed. Config file saved for future use.');
     } else {
       console.log('Crawl interrupted. Job directory preserved for resuming later.');
     }
